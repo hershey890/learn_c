@@ -3,26 +3,25 @@
  * @brief Implements a thread safe producer consumer buffer
  *
  * @param buffer_length Length of buffer to be created between the two threads
- *
- * \todo implement a source buffer for the producer function to run through for its task
  */
-#include <bits/pthreadtypes.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <stdbool.h>
 #include <pthread.h>
+#include <stdatomic.h>
 
 /**
- * @brief Holds a dynamically allocated array with constructor/destructors
+ * @brief Holds a dynamically allocated array implementing a circular buffer
  */
 struct Buffer {
-	pthread_mutex_t* m;
-	pthread_cond_t* c;
+	pthread_mutex_t m;
+	pthread_cond_t c;
 	int* ptr;
 	size_t idx;
 	size_t size;
 	size_t capacity;
-	bool msg_complete;
+	atomic_char msg_complete;
+	//bool msg_complete;
 	int (*create)(struct Buffer* buf, size_t capacity);
 	void (*destroy)(struct Buffer* buf);
 };
@@ -38,13 +37,13 @@ int create(struct Buffer* buffer, size_t capacity) {
 	buffer->ptr = (int*)malloc(capacity*sizeof(int));
 	if(buffer->ptr == NULL)
 		return -1;
-	if(pthread_mutex_init(buffer->m, NULL))
+	if(pthread_mutex_init(&buffer->m, NULL))
 		return -1;
-	if(pthread_cond_init(buffer->c, NULL))
+	if(pthread_cond_init(&buffer->c, NULL))
 		return -1;
 	buffer->size = 0;
 	buffer->capacity = capacity;
-	buffer->msg_complete = false;
+	buffer->msg_complete = 0;
 	return 0;
 }
 
@@ -55,33 +54,44 @@ int create(struct Buffer* buffer, size_t capacity) {
  */ 
 void destroy(struct Buffer* buffer) {
 	free(buffer->ptr);
-	pthread_cond_destroy(buffer->c);
-	pthread_mutex_destroy(buffer->m);
+	pthread_cond_destroy(&buffer->c);
+	pthread_mutex_destroy(&buffer->m);
 }
 
 void producer(void* buffer) {
+	/* Data stream to put in circular buffer */
+	const size_t data_len = 128;
+	int data_to_send[data_len];
+	for(size_t i=0; i<data_len; i++)
+		data_to_send[i] = i;
+
 	struct Buffer* buf = (struct Buffer*)(buffer);
-	while(1) {
-		pthread_mutex_lock(buf->m);
-		while(buf->size == buf->capacity) pthread_cond_wait(buf->c, buf->m);
+	for(size_t data_idx = 0; data_idx < data_len;) {
+		pthread_mutex_lock(&buf->m);
+		while(buf->size == buf->capacity) pthread_cond_wait(&buf->c, &buf->m);
+		buf->ptr[buf->idx % buf->capacity] = data_to_send[data_idx++];
 		buf->idx++;
 		buf->size++;
-		pthread_mutex_unlock(buf->m);
-		pthread_cond_broadcast(buf->c);
+		pthread_mutex_unlock(&buf->m);
+		pthread_cond_broadcast(&buf->c);
 	}	
+	buf->msg_complete = 1;
+	pthread_exit(0);
 }
 
 void consumer(void* buffer) {
 	struct Buffer* buf = (struct Buffer*)(buffer);
-	while(1) {
-		pthread_mutex_lock(buf->m);
-		while(buf->size == 0) pthread_cond_wait(buf->c, buf->m);
+	while(!buf->msg_complete) {
+		pthread_mutex_lock(&buf->m);
+		while(buf->size == 0) pthread_cond_wait(&buf->c, &buf->m);
 		printf("C:%d, ", buf->ptr[buf->idx % buf->capacity]);
 		buf->idx++;
 		buf->size--;
-		pthread_mutex_unlock(buf->m);
-		pthread_cond_broadcast(buf->c);
+		pthread_mutex_unlock(&buf->m);
+		pthread_cond_broadcast(&buf->c);
 	}	
+	printf("\n");
+	pthread_exit(0);
 }
 
 int main(int argc, char *argv[]) {
@@ -129,4 +139,5 @@ int main(int argc, char *argv[]) {
 		return 1;
 	}
 	buf.destroy(&buf);
+	return 0;
 }
