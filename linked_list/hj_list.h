@@ -6,11 +6,12 @@
  */
 #ifndef HJ_LIST_H
 #define HJ_LIST_H
+
+#include <stddef.h>
+
 #ifdef __cplusplus
 extern "C" {
 #endif
-
-#include <stddef.h>
 
 struct hj_node {
 	void *data;

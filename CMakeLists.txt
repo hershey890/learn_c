@@ -9,6 +9,7 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 #           Subdirectories         #
 ####################################
 add_subdirectory(linked_list)
+add_subdirectory(shared_memory)
 
 ####################################
 #           GoogleTest             #

@@ -6,7 +6,10 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 add_library(
     linked_list
-    SHARED
+    STATIC
     hj_list.h
     hj_list.c
 )
+
+add_executable(linked_list_example example.c)
+target_link_libraries(linked_list_example PRIVATE linked_list)
